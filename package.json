@@ -1,6 +1,6 @@
 {
 	"name": "open-in-webviewer",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"description": "Adds a button on HTML files to open them in Obsidian's core Web Viewer.",
 	"main": "main.js",
 	"scripts": {
