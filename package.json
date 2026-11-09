@@ -1,18 +1,27 @@
 {
-	"name": "open-in-webviewer",
-	"version": "1.0.1",
-	"description": "Adds a button on HTML files to open them in Obsidian's core Web Viewer.",
-	"main": "main.js",
-	"scripts": {
-		"dev": "node esbuild.config.mjs",
-		"build": "node esbuild.config.mjs production"
-	},
-	"license": "MIT",
-	"devDependencies": {
-		"@types/node": "^20.11.5",
-		"builtin-modules": "3.3.0",
-		"esbuild": "0.20.0",
-		"obsidian": "latest",
-		"typescript": "5.3.3"
-	}
+  "name": "open-in-webviewer",
+  "version": "1.2.0",
+  "description": "Adds a button on HTML files to open them in Obsidian's core Web Viewer.",
+  "main": "main.js",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "node esbuild.config.mjs production",
+    "test": "npx tsc -p tsconfig.test.json && node --test test/*.test.mjs",
+    "typecheck": "tsc --noEmit --skipLibCheck"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.11.5",
+    "builtin-modules": "3.3.0",
+    "esbuild": "0.20.0",
+    "obsidian": "latest",
+    "typescript": "5.3.3"
+  },
+  "allowScripts": {
+    "esbuild@0.20.0": true
+  },
+  "dependencies": {
+    "postcss": "^8.5.31",
+    "postcss-value-parser": "^4.2.0"
+  }
 }

@@ -1,34 +1,27 @@
-import { FileView, Notice, Plugin, TFile, WorkspaceLeaf } from "obsidian";
-import * as http from "http";
-import * as fs from "fs";
-import * as path from "path";
+/**
+ * Open in Web Viewer — plugin entry point.
+ *
+ * Desktop: starts a loopback HTTP server and opens files in Obsidian's core
+ *          webviewer using an http:// URL (Node modules loaded lazily).
+ * Mobile:  registers MobileHtmlView, a FileView built on the adapted Style HTML Viewer
+ *          (vendored, MIT, taihoe/style-html-viewer v1.0.6): its resolver/PostCSS asset
+ *          engine and preview lifecycle render HTML and JSON in a sandboxed iframe.
+ *          No Node / Electron APIs are loaded on this path.
+ */
+
+import { FileView, Notice, Platform, Plugin, TFile, WorkspaceLeaf } from "obsidian";
+import { MobileHtmlView, MOBILE_VIEW_TYPE } from "./src/mobile-view";
+import { startDesktopServer } from "./src/desktop-server";
+import type { ServerHandle } from "./src/desktop-server";
+import { VaultWatcher } from "./src/vendor/style-html-viewer/src/watcher/VaultWatcher";
 
 const REDIRECT_VIEW_TYPE = "open-in-webviewer-redirect";
 const REDIRECT_EXTENSIONS = ["html", "htm", "json"];
 
-const MIME_TYPES: Record<string, string> = {
-	".html": "text/html; charset=utf-8",
-	".htm": "text/html; charset=utf-8",
-	".js": "text/javascript; charset=utf-8",
-	".mjs": "text/javascript; charset=utf-8",
-	".css": "text/css; charset=utf-8",
-	".json": "application/json; charset=utf-8",
-	".png": "image/png",
-	".jpg": "image/jpeg",
-	".jpeg": "image/jpeg",
-	".gif": "image/gif",
-	".svg": "image/svg+xml",
-	".ico": "image/x-icon",
-	".webp": "image/webp",
-	".woff": "font/woff",
-	".woff2": "font/woff2",
-	".ttf": "font/ttf",
-	".mp4": "video/mp4",
-	".webm": "video/webm",
-	".wasm": "application/wasm",
-	".txt": "text/plain; charset=utf-8",
-};
-
+/**
+ * Lightweight redirect view used only on desktop: opens the file in the
+ * webviewer tab then detaches itself.
+ */
 class RedirectView extends FileView {
 	plugin: OpenInWebViewerPlugin;
 
@@ -53,54 +46,97 @@ class RedirectView extends FileView {
 }
 
 export default class OpenInWebViewerPlugin extends Plugin {
-	private server: http.Server | null = null;
-	private serverPort: number | null = null;
+	private serverHandle: ServerHandle | null = null;
+	private watcher: VaultWatcher | null = null;
 
 	async onload() {
-		await this.startServer();
+		if (Platform.isMobile) {
+			// ---- Mobile path: register sandboxed FileView ----
+			this.watcher = new VaultWatcher(this.app.vault);
+			this.watcher.register();
+			this.registerView(
+				MOBILE_VIEW_TYPE,
+				(leaf) => new MobileHtmlView(leaf, this.watcher!)
+			);
+			this.registerExtensions(REDIRECT_EXTENSIONS, MOBILE_VIEW_TYPE);
 
-		this.registerView(REDIRECT_VIEW_TYPE, (leaf) => new RedirectView(leaf, this));
-		this.registerExtensions(REDIRECT_EXTENSIONS, REDIRECT_VIEW_TYPE);
+			this.registerEvent(
+				this.app.workspace.on("file-menu", (menu, file) => {
+					if (!(file instanceof TFile)) return;
+					if (!REDIRECT_EXTENSIONS.includes(file.extension)) return;
+					menu.addItem((item) => {
+						item
+							.setTitle("Open in Web Viewer")
+							.setIcon("globe")
+							.onClick(() => this.openMobile(file));
+					});
+				})
+			);
 
-		this.registerEvent(
-			this.app.workspace.on("file-menu", (menu, file) => {
-				if (!(file instanceof TFile)) return;
-				if (!REDIRECT_EXTENSIONS.includes(file.extension)) return;
+			this.addCommand({
+				id: "open-active-file-in-webviewer",
+				name: "Open current file in Web Viewer",
+				checkCallback: (checking) => {
+					const file = this.app.workspace.getActiveFile();
+					const eligible =
+						!!file && REDIRECT_EXTENSIONS.includes(file.extension);
+					if (checking) return eligible;
+					if (file) this.openMobile(file);
+					return true;
+				},
+			});
+		} else {
+			// ---- Desktop path: HTTP server + core webviewer ----
+			await this.startDesktop();
 
-				menu.addItem((item) => {
-					item
-						.setTitle("Open in Web Viewer")
-						.setIcon("globe")
-						.onClick(() => this.openInWebViewer(file));
-				});
-			})
-		);
+			this.registerView(
+				REDIRECT_VIEW_TYPE,
+				(leaf) => new RedirectView(leaf, this)
+			);
+			this.registerExtensions(REDIRECT_EXTENSIONS, REDIRECT_VIEW_TYPE);
 
-		this.addCommand({
-			id: "open-active-file-in-webviewer",
-			name: "Open current file in Web Viewer",
-			checkCallback: (checking) => {
-				const file = this.app.workspace.getActiveFile();
-				const eligible = !!file && REDIRECT_EXTENSIONS.includes(file.extension);
-				if (checking) return eligible;
-				if (file) this.openInWebViewer(file);
-				return true;
-			},
-		});
+			this.registerEvent(
+				this.app.workspace.on("file-menu", (menu, file) => {
+					if (!(file instanceof TFile)) return;
+					if (!REDIRECT_EXTENSIONS.includes(file.extension)) return;
+					menu.addItem((item) => {
+						item
+							.setTitle("Open in Web Viewer")
+							.setIcon("globe")
+							.onClick(() => this.openInWebViewer(file));
+					});
+				})
+			);
+
+			this.addCommand({
+				id: "open-active-file-in-webviewer",
+				name: "Open current file in Web Viewer",
+				checkCallback: (checking) => {
+					const file = this.app.workspace.getActiveFile();
+					const eligible =
+						!!file && REDIRECT_EXTENSIONS.includes(file.extension);
+					if (checking) return eligible;
+					if (file) this.openInWebViewer(file);
+					return true;
+				},
+			});
+		}
 	}
 
 	onunload() {
-		this.server?.close();
-		this.server = null;
+		this.serverHandle?.close();
+		this.serverHandle = null;
+		this.watcher?.unregister();
+		this.watcher = null;
 	}
 
+	/** Desktop: open file in Obsidian's core webviewer via HTTP URL. */
 	async openInWebViewer(file: TFile, leaf?: WorkspaceLeaf) {
 		const fileUrl = this.buildFileUrl(file);
 		if (!fileUrl) {
 			new Notice("Open in Web Viewer only works on desktop.");
 			return;
 		}
-
 		const target = leaf ?? this.app.workspace.getLeaf("tab");
 		await target.setViewState({
 			type: "webviewer",
@@ -109,42 +145,31 @@ export default class OpenInWebViewerPlugin extends Plugin {
 		});
 	}
 
-	private buildFileUrl(file: TFile): string | null {
-		if (!this.serverPort) return null;
-		return `http://127.0.0.1:${this.serverPort}/${encodeURI(file.path.replace(/\\/g, "/"))}`;
+	/** Mobile: open file in MobileHtmlView. */
+	private async openMobile(file: TFile, leaf?: WorkspaceLeaf) {
+		const target = leaf ?? this.app.workspace.getLeaf("tab");
+		await target.setViewState({
+			type: MOBILE_VIEW_TYPE,
+			state: { file: file.path },
+			active: true,
+		});
 	}
 
-	private async startServer(): Promise<void> {
-		const vaultRoot = (this.app.vault.adapter as any).getBasePath?.();
-		if (!vaultRoot) return; // not on desktop
+	private buildFileUrl(file: TFile): string | null {
+		if (!this.serverHandle) return null;
+		return `http://127.0.0.1:${this.serverHandle.port}/${file.path.replace(/\\/g, "/").split("/").map(encodeURIComponent).join("/")}`;
+	}
 
-		this.server = http.createServer((req, res) => {
-			const requestedPath = decodeURIComponent((req.url ?? "/").split("?")[0]);
-			const resolved = path.normalize(path.join(vaultRoot, requestedPath));
+	private async startDesktop(): Promise<void> {
+		const vaultRoot = (
+			this.app.vault.adapter as unknown as { basePath?: string }
+		).basePath;
+		if (!vaultRoot) return; // Not on desktop with FS access
 
-			if (!resolved.startsWith(path.normalize(vaultRoot))) {
-				res.writeHead(403);
-				res.end("Forbidden");
-				return;
-			}
-
-			fs.readFile(resolved, (err, data) => {
-				if (err) {
-					res.writeHead(404);
-					res.end("Not found");
-					return;
-				}
-				const ext = path.extname(resolved).toLowerCase();
-				res.writeHead(200, { "Content-Type": MIME_TYPES[ext] ?? "application/octet-stream" });
-				res.end(data);
-			});
-		});
-
-		await new Promise<void>((resolve) => {
-			this.server!.listen(0, "127.0.0.1", () => resolve());
-		});
-
-		const address = this.server.address();
-		this.serverPort = typeof address === "object" && address ? address.port : null;
+		try {
+			this.serverHandle = await startDesktopServer(vaultRoot);
+		} catch (e) {
+			console.error("[OpenInWebViewer] Failed to start server:", e);
+		}
 	}
 }
