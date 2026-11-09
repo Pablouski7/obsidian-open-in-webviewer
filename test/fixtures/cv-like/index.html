@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Synthetic recap fixture</title>
+<!-- Same structural risks as a real tabbed recap, with invented content. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Spectral:wght@400;600&display=swap" rel="stylesheet">
+<script>
+  /* Authored script running before the body: must already see a usable localStorage. */
+  try { window.__headProbe = localStorage.getItem('probe-key') === null ? 'ok-null' : 'ok-value'; }
+  catch (e) { window.__headProbe = 'threw:' + e.name; }
+</script>
+<style>
+  :root { --bg:#fbf8f2; --ink:#222; --accent:#a1442b; --accent2:#2b6ca1; }
+  :root[data-theme="dark"] { --bg:#16181d; --ink:#e8e6e0; }
+  html, body { margin:0; }
+  body { background:var(--bg); color:var(--ink); font-family:Georgia, serif; line-height:1.55; }
+  .wrap { max-width:720px; margin:0 auto; padding:0 18px 80px; }
+  #themeToggle { position:fixed; top:18px; right:18px; z-index:50; min-height:36px; }
+  nav.sticky { position:sticky; top:0; z-index:40; background:var(--bg); display:flex; flex-wrap:wrap; gap:4px 16px; border-bottom:1px solid #8884; padding:8px 18px; }
+  nav.sticky a.tab { color:var(--ink); text-decoration:none; border-bottom:2px solid transparent; padding:6px 0; }
+  nav.sticky a.active { border-bottom-color:var(--accent); }
+  nav.sticky a.code-tab.active { border-bottom-color:var(--accent2); }
+  section.block { min-height:900px; margin-bottom:64px; }
+  #codigo .section-label { color:var(--accent2); }
+  pre.code { background:#0002; padding:12px; overflow-x:auto; }
+</style>
+</head>
+<body>
+<button id="themeToggle" type="button">...</button>
+<nav class="sticky" aria-label="Secciones">
+  <a href="#inicio" class="tab">Inicio</a>
+  <a href="#teoria" class="tab">Teoría</a>
+  <a href="#codigo" class="tab code-tab">Código / práctica</a>
+  <a href="#cierre" class="tab">Cierre</a>
+</nav>
+<div class="wrap">
+  <section class="block" id="inicio"><p class="section-label">Inicio</p><h1>Resumen sintético</h1><p>Contenido inventado para pruebas.</p></section>
+  <section class="block" id="teoria"><p class="section-label">Teoría</p><h2>Capas de convolución</h2><p>Texto de relleno sobre convoluciones.</p></section>
+  <section class="block" id="codigo"><p class="section-label">Código</p><h2>Práctica</h2><pre class="code">model = Sequential()
+model.add(Conv2D(8, 3))</pre><p id="practice-note">Ejercicio visible solo al llegar aquí.</p></section>
+  <section class="block" id="cierre"><p class="section-label">Cierre</p><h2>Conclusión</h2><p>Fin.</p></section>
+</div>
+<script>
+(function(){
+  var toggle = document.getElementById('themeToggle');
+  var root = document.documentElement;
+  window.__events = ['script-start'];
+  function apply(theme){
+    if(theme){ root.setAttribute('data-theme', theme); } else { root.removeAttribute('data-theme'); }
+    toggle.textContent = theme === 'dark' ? 'Modo claro' : 'Modo oscuro';
+  }
+  // Storage is read BEFORE the tabs are wired; if it throws, nothing below ever runs.
+  var saved = localStorage.getItem('demo-theme');
+  window.__events.push('storage-read:' + saved);
+  apply(saved);
+  toggle.addEventListener('click', function(){
+    var next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    localStorage.setItem('demo-theme', next);
+    sessionStorage.setItem('last-toggle', next);
+    apply(next);
+  });
+
+  var links = document.querySelectorAll('nav.sticky a.tab');
+  var sections = Array.prototype.map.call(links, function(a){
+    return document.querySelector(a.getAttribute('href'));
+  });
+  var observer = new IntersectionObserver(function(entries){
+    entries.forEach(function(entry){
+      if(entry.isIntersecting){
+        var idx = sections.indexOf(entry.target);
+        links.forEach(function(l){ l.classList.remove('active'); });
+        if(idx >= 0){ links[idx].classList.add('active'); }
+      }
+    });
+  }, { rootMargin: '-40% 0px -55% 0px', threshold: 0 });
+  sections.forEach(function(s){ if(s) observer.observe(s); });
+  window.__events.push('tabs-wired');
+})();
+</script>
+</body>
+</html>

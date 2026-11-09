@@ -1,0 +1,238 @@
+/* ==========================================================================
+   HTML / JSON reader chrome (mobile).
+   Adapted from taihoe/style-html-viewer v1.0.6 (708c18c): the desktop control panel (multi-row toolbar,
+   width simulator, script checkbox, heading <select>, <details> diagnostics) is replaced by ONE compact
+   row plus on-demand overlays. See NOTICE.md.
+
+   Rules:
+   - Every selector is scoped to .html-viewer-container; nothing targets Obsidian's own header or tabs.
+   - Colours, fonts and radii come from Obsidian theme variables.
+   - Touch targets are at least 44 x 44 CSS px; the primary row is 48 px.
+   - Menu, diagnostics and heading list float over the document; they never resize it.
+   - The search-highlight rules for the isolated document live in src/ipc/IpcBridge.ts.
+   ========================================================================== */
+
+.html-viewer-container {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background-color: var(--background-primary);
+  color: var(--text-normal);
+}
+/* `display:flex` below would otherwise defeat the [hidden] attribute. */
+.html-viewer-container [hidden] { display: none !important; }
+
+/* ---- Primary row ------------------------------------------------------- */
+.html-viewer-container .html-viewer-bar {
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  height: 48px;
+  background-color: var(--background-secondary, var(--background-primary));
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+.html-viewer-container .html-viewer-bar-main,
+.html-viewer-container .html-viewer-bar-search {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  height: 100%;
+  padding: 0 2px 0 8px;
+}
+.html-viewer-container .html-viewer-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-right: 8px;
+  font-size: var(--font-ui-small);
+  color: var(--text-muted);
+}
+.html-viewer-container .html-viewer-button {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  border-radius: var(--radius-m, 8px);
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.html-viewer-container .html-viewer-button:active { background-color: var(--background-modifier-hover); color: var(--text-normal); }
+.html-viewer-container .html-viewer-button:focus-visible,
+.html-viewer-container .html-viewer-menu-item:focus-visible,
+.html-viewer-container .html-viewer-heading-item:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: -2px; }
+.html-viewer-container .html-viewer-button:disabled { opacity: 0.4; }
+.html-viewer-container .html-viewer-button svg { width: 20px; height: 20px; }
+/* A dot on the overflow button when the document has diagnostics; the details stay in the menu. */
+.html-viewer-container .html-viewer-button[data-issues]::after {
+  content: "";
+  position: absolute;
+  top: 9px;
+  right: 9px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--text-warning, #e0ac00);
+}
+
+/* Search replaces the row contents in place. */
+.html-viewer-container .html-viewer-bar-search input[type="search"] {
+  flex: 1 1 0;
+  min-width: 56px;
+  box-sizing: border-box;
+  height: 44px;
+  margin: 0;
+  font-size: var(--font-ui-medium);
+}
+.html-viewer-container .html-viewer-matches {
+  flex: 0 0 auto;
+  min-width: 44px;
+  padding: 0 4px;
+  text-align: center;
+  font-size: var(--font-ui-small);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Document ---------------------------------------------------------- */
+.html-viewer-container .html-viewer-preview-container {
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+  background-color: var(--background-primary);
+}
+/* The white canvas is the iframe element itself: a document that paints nothing stays readable on a dark theme,
+   and a document that paints a body or root background (propagated to its canvas) simply covers it. */
+.html-viewer-container .html-viewer-iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background-color: #fff;
+  color-scheme: light;
+}
+.html-viewer-container .html-viewer-loading { margin: 0; padding: 16px; color: var(--text-muted); }
+.html-viewer-container .html-viewer-source-container {
+  box-sizing: border-box;
+  height: 100%;
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-small);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background-color: var(--background-primary);
+  color: var(--text-normal);
+}
+
+/* ---- Overlays ---------------------------------------------------------- */
+.html-viewer-container .html-viewer-scrim {
+  position: absolute;
+  top: 48px;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 10;
+  background-color: rgba(0, 0, 0, 0.25);
+}
+.html-viewer-container .html-viewer-menu,
+.html-viewer-container .html-viewer-sheet {
+  position: absolute;
+  z-index: 20;
+  box-sizing: border-box;
+  background-color: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m, 8px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+.html-viewer-container .html-viewer-menu {
+  top: 52px;
+  right: 8px;
+  display: flex;
+  flex-direction: column;
+  min-width: 200px;
+  max-width: calc(100% - 16px);
+  padding: 4px;
+}
+.html-viewer-container .html-viewer-menu-item,
+.html-viewer-container .html-viewer-heading-item {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  margin: 0;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-normal);
+  font-size: var(--font-ui-medium);
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.html-viewer-container .html-viewer-menu-item:active,
+.html-viewer-container .html-viewer-heading-item:active { background-color: var(--background-modifier-hover); }
+.html-viewer-container .html-viewer-menu-item:disabled { opacity: 0.4; }
+.html-viewer-container .html-viewer-sheet {
+  right: 8px;
+  bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+  left: 8px;
+  display: flex;
+  flex-direction: column;
+  max-height: 70%;
+}
+.html-viewer-container .html-viewer-sheet-header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 2px 0 12px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+.html-viewer-container .html-viewer-sheet-title { margin: 0; font-size: var(--font-ui-medium); font-weight: 600; }
+.html-viewer-container .html-viewer-sheet-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 4px 12px 8px;
+  font-size: var(--font-ui-small);
+  -webkit-overflow-scrolling: touch;
+}
+.html-viewer-container .html-viewer-sheet-body h3 { margin: 12px 0 4px; font-size: var(--font-ui-small); color: var(--text-muted); }
+.html-viewer-container .html-viewer-sheet-body ul { margin: 0; padding-left: 18px; }
+.html-viewer-container .html-viewer-sheet-body li { margin: 0 0 6px; overflow-wrap: anywhere; }
+.html-viewer-container .html-viewer-sheet-body li.is-notice { color: var(--text-muted); }
+.html-viewer-container .html-viewer-sheet-body .html-viewer-heading-item { padding-right: 12px; }
+
+/* ---- Load errors ------------------------------------------------------- */
+.html-viewer-container .html-viewer-error-container { box-sizing: border-box; padding: 16px; }
+.html-viewer-container .html-viewer-error-card {
+  box-sizing: border-box;
+  max-width: 500px;
+  margin: 0 auto;
+  padding: 16px;
+  border: 1px solid var(--text-error);
+  border-radius: var(--radius-m, 8px);
+  background-color: var(--background-secondary, var(--background-primary));
+}
+.html-viewer-container .html-viewer-error-title { color: var(--text-error); }
+.html-viewer-container .html-viewer-error-message { margin: 8px 0 0; overflow-wrap: anywhere; }

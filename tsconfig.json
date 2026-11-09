@@ -4,6 +4,7 @@
 		"inlineSourceMap": true,
 		"inlineSources": true,
 		"module": "ESNext",
+		"allowSyntheticDefaultImports": true,
 		"target": "ES2018",
 		"allowJs": true,
 		"noImplicitAny": true,

@@ -1,9 +1,9 @@
 {
 	"id": "open-in-webviewer",
 	"name": "Open in Web Viewer",
-	"version": "1.0.1",
+	"version": "1.2.0",
 	"minAppVersion": "1.8.3",
-	"description": "Adds a button on HTML files to open them in Obsidian's core Web Viewer, so JavaScript actually renders.",
+	"description": "Opens HTML/HTM/JSON vault files in a sandboxed viewer. Desktop: core Web Viewer via HTTP. Mobile: sandboxed iframe with inlined assets.",
 	"author": "pablo-herrera",
-	"isDesktopOnly": true
+	"isDesktopOnly": false
 }
